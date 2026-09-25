@@ -16,7 +16,6 @@
 | 合成数据生成与测试 | `scripts/make_synthetic_pool.py`、`tests/` |
 | 成对偏好 RM：LoRA / QLoRA | `reward_training/train_rm.py` |
 | 成对偏好 RM：全参数 FSDP | `reward_training/train_rm_fsdp.py` |
-| 多指标回归 RM | `reward_training/train_criteria_rm.py` |
 | 语法、算法与匿名信息检查 | `scripts/check_release.sh`、`scripts/audit_release.py` |
 
 六种组合是 Uniform-BoN、Greedy-BoN、Uniform-ITP-fixed、Uniform-ITP-auto、
@@ -64,7 +63,7 @@ python -B -m pessimism.run --input '<SCORED_POOL_JSON>' --budget 255 --seed 2026
 python -m pip install -r reward_training/requirements.txt
 bash reward_training/scripts/train_rm.sh --help
 bash reward_training/scripts/train_rm_fsdp.sh --help
-bash reward_training/scripts/train_criteria_rm.sh --help
+bash reward_training/scripts/validate_rm.sh --help
 ```
 
 训练脚本通过命令行接收用户自己的模型、数据和输出位置，未设置任何真实
@@ -82,11 +81,11 @@ RM、Judge 或数据集路径；不包含下载地址、私人账号或跟踪服
 ## 本次验收结果
 
 - 69 项算法、核心公式和命令行测试通过。
-- 6 项 RM 离线测试通过，包含真实执行两步的小模型 LoRA 训练、保存重载及
-  五属性回归训练；使用的模型为临时随机初始化，数据为临时合成数据。
+- 4 项 RM 离线测试通过，包含真实执行两步的小模型 LoRA 训练及保存重载；
+  使用的模型为临时随机初始化，数据为临时合成数据。
 - 把整个目录复制到独立临时位置后，两套测试仍全部通过，六种算法的 shell
   示例可从其他工作目录启动，无需原工程目录。
-- Python / shell 语法、四个训练与验证脚本的帮助入口、源码匿名检查通过。
+- Python / shell 语法、三个训练与验证脚本的帮助入口、源码匿名检查通过。
 - 7 个算法核心、包入口和基线文件与原实现逐字节一致。
 
 完整 GPU QLoRA、混合精度训练和多 GPU FSDP 未执行；FSDP 启动配置仅验证了

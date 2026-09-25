@@ -22,7 +22,7 @@ paper's empirical results.
 | `scripts/run_algorithms.sh` | Algorithm run wrapper. |
 | `scripts/make_synthetic_pool.py` | Generate an explicitly synthetic input fixture. |
 | `tests/` | Core analytical checks and portable runner tests. |
-| `reward_training/` | Pairwise LoRA/QLoRA, pairwise full-parameter FSDP, and multi-criterion regression training. |
+| `reward_training/` | Pairwise LoRA/QLoRA, full-parameter FSDP, and scalar reward-model validation. |
 | `scripts/check_release.sh` | CPU algorithm tests, Python/shell syntax checks, and source audit. |
 | `scripts/audit_release.py` | Scan source text for common identifying patterns and generated artifacts. |
 | `RELEASE_GUIDE.md` | Chinese contents and execution guide. |
@@ -99,7 +99,7 @@ Install the optional dependencies and consult the training guide:
 python -m pip install -r reward_training/requirements.txt
 bash reward_training/scripts/train_rm.sh --help
 bash reward_training/scripts/train_rm_fsdp.sh --help
-bash reward_training/scripts/train_criteria_rm.sh --help
+bash reward_training/scripts/validate_rm.sh --help
 ```
 
 The [training guide](reward_training/README.md) gives the exact local data schemas,
@@ -135,19 +135,9 @@ bash reward_training/scripts/validate_rm.sh \
   --model_path '<BASE_MODEL_DIR>' --adapter_path '<ADAPTER_DIR>' \
   --dataset_path '<PAIRWISE_DATA_ROOT>' --domain '<DOMAIN>' \
   --output_dir '<NEW_VALIDATION_OUTPUT_DIR>' --no-load_in_4bit --bf16
-
-# Five-attribute regression, with explicitly separate training/validation files.
-bash reward_training/scripts/train_criteria_rm.sh \
-  --model_path '<BASE_MODEL_DIR>' --train_file '<TRAIN_JSON>' \
-  --validation_file '<VALIDATION_JSON>' --output_dir '<NEW_OUTPUT_DIR>' \
-  --use_lora --bf16
 ```
 
-Regression records contain `prompt`, `response`, and five scores in `[0, 4]`:
-`helpfulness`, `correctness`, `coherence`, `complexity`, `verbosity`. The model
-predicts all five scores divided by 4, using MSE and the original plain-text
-prompt/response format. No automatic train/validation split is made. FSDP saves
-model weights only by default, so these checkpoints do not support exact
+FSDP saves model weights only by default, so these checkpoints do not support exact
 optimizer-state resumption. The launcher targets a single machine with at least
 two GPUs. Full GPU/quantization/distributed behavior requires validation on the
 target hardware.
@@ -180,12 +170,11 @@ assigned on your behalf.
 ## Validation performed
 
 - 69 algorithm/core/CLI tests passed.
-- 6 CPU reward-training tests passed, including two-step LoRA train/save/reload
-  and two-step five-attribute regression training.
+- 4 CPU reward-training tests passed, including two-step LoRA train/save/reload.
 - The complete directory was copied to a separate temporary location. Both
   suites passed there, and the shell demo ran all six methods from another
   working directory, spending 60 candidates per method.
-- All four training/validation wrappers passed `--help`; Python and shell
+- All three training/validation wrappers passed `--help`; Python and shell
   syntax checks and the source audit passed. Tests left no generated files in
   the release tree.
 - The seven copied core/package/baseline Python files are byte-for-byte

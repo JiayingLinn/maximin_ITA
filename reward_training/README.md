@@ -9,7 +9,6 @@
 | `train_rm.py` | 独立领域标量 RM；Bradley–Terry 成对偏好损失；LoRA / 4-bit QLoRA | `scripts/train_rm.sh` |
 | `train_rm_fsdp.py` | 同一成对偏好目标的全参数多 GPU FSDP 训练 | `scripts/train_rm_fsdp.sh` |
 | `validate_rm.py` | 单独验证 LoRA 适配器或完整标量 RM 检查点 | `scripts/validate_rm.sh` |
-| `train_criteria_rm.py` | 五维属性 RM；MSE 回归；全参数或 LoRA / QLoRA | `scripts/train_criteria_rm.sh` |
 | `shp_rm/` | 本地数据校验、聊天模板、保留回答尾部的截断、模型加载、损失、指标及检查点检查 | 由上述入口调用 |
 | `tests/test_training.py` | 本地合成数据和随机初始化小模型的 CPU 验证 | 下方 `unittest` 命令 |
 
@@ -82,20 +81,6 @@ bash scripts/validate_rm.sh --full_model \
 
 脚本默认仅保存模型权重，不保存优化器状态，所以不支持精确续训。默认优化器是 `adamw_torch`；`--optim adamw_bnb_8bit` 需要额外 QLoRA 依赖。FSDP 的混合精度应通过包装脚本的 `--mixed_precision` 设置。此包装器面向单机多 GPU；多机用户需自行提供 Accelerate 启动配置。`--estimate_only --world_size N` 可在直接调用 `train_rm_fsdp.py` 时估算训练状态内存；估计不包含激活、通信缓冲或 CUDA 上下文，也不能证明模型能够放入显存。
 
-## 五属性回归 RM
-
-两个本地 JSON / JSON Lines 文件分别通过 `--train_file` 和 `--validation_file` 显式提供。字段为 `prompt`、`response` 和 `helpfulness`、`correctness`、`coherence`、`complexity`、`verbosity`；五个标签范围为 `[0, 4]`。保留原实现的文本格式 `Prompt:\n...\n\nResponse:\n...`、标签除以 4 的归一化和五维 MSE 回归损失。指标包含各属性与平均 MSE、MAE。
-
-```bash
-bash scripts/train_criteria_rm.sh \
-  --model_path "${MODEL_DIR:?}" \
-  --train_file "${CRITERIA_TRAIN_FILE:?}" \
-  --validation_file "${CRITERIA_VALIDATION_FILE:?}" \
-  --output_dir "${RM_OUTPUT_DIR:?}" --use_lora --load_in_4bit --bf16
-```
-
-去掉 `--load_in_4bit` 使用非量化 LoRA；同时去掉 `--use_lora` 使用全参数训练。这个入口使用单设备 Trainer，不是 FSDP 入口。与旧实现不同，验证文件不再从训练文件中随机划分，而是使用调用方明确提供的独立文件；应保证两者不存在样本交叉。
-
 ## 离线测试与验证范围
 
 ```bash
@@ -105,10 +90,9 @@ python -m unittest discover -s tests -v
 
 bash scripts/train_rm.sh --help
 bash scripts/train_rm_fsdp.sh --help
-bash scripts/train_criteria_rm.sh --help
 bash scripts/validate_rm.sh --help
 ```
 
-测试在系统临时目录中创建合成数据与随机初始化小模型，覆盖 A/B 映射、Bradley–Terry 梯度方向、测试集隔离、五属性标签缩放、指标计算、两步 LoRA 训练及保存重载、两步五属性回归训练。无需下载模型、真实数据或 GPU。它验证的是实现连通性，不是论文训练结果。完整 CUDA QLoRA、BF16/FP16 和多 GPU FSDP 需在相应硬件上另行运行。
+测试在系统临时目录中创建合成数据与随机初始化小模型，覆盖 A/B 映射、Bradley–Terry 梯度方向、测试集隔离、成对偏好指标计算、FSDP 参数检查、两步 LoRA 训练及保存重载。无需下载模型、真实数据或 GPU。它验证的是实现连通性，不是论文训练结果。完整 CUDA QLoRA、BF16/FP16 和多 GPU FSDP 需在相应硬件上另行运行。
 
 整理时对副本的正确性修正：FSDP 梯度检查的分布式归约由所有 rank 参与；FSDP 检查及保存使用 Trainer 实际包装后的模型；FSDP 拒绝单进程启动；非量化适配器重载维持与训练一致的参数精度；截断检查不再绑定某个模型家族的 assistant 标记。移除了固定领域列表、固定数据条数和旧实验的硬件/路径默认值。
