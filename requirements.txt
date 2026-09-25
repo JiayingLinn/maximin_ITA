@@ -1,0 +1,2 @@
+# CPU-only algorithm demos and tests; model training has separate dependencies.
+numpy>=1.26,<3
