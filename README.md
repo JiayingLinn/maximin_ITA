@@ -1,96 +1,141 @@
 # MAXMIN INFERENCE-TIME ALIGNMENT WITH DIVERSE REWARDS
 
-## Install and test
+Train domain-specific reward models, generate responses with Qwen2.5-3B-Instruct,
+score each response with a 3B proxy RM and a 7B evaluation RM, then run the six
+allocation and selection algorithms on the scored pools. The 7B judge is a
+separately trained scalar reward model. Each model uses the Bradley–Terry
+pairwise preference loss.
+
+## Install and choose local resources
+
+Use Python 3.12 on Linux. Run all commands from the repository root, in the same
+Bash session. The full pipeline uses one CUDA GPU and loads one model at a time. Model checkpoints,
+data, and generated outputs are supplied or created locally.
 
 ```bash
-python -m pip install -r requirements.txt
-PYTHON_BIN=python bash scripts/check_release.sh
+python3.12 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt -r reward_training/requirements-qlora.txt
+export PYTHON_BIN=python
+
+# Replace these four placeholders with your own absolute directories.
+export MODEL_3B='<LOCAL_QWEN2_5_3B_INSTRUCT_DIRECTORY>'
+export MODEL_7B='<LOCAL_QWEN2_5_7B_INSTRUCT_DIRECTORY>'
+export DATA_ROOT='<LOCAL_SHP_DATASET_DIRECTORY>'
+export RUN_ROOT='<NEW_OUTPUT_DIRECTORY>'
+export SEED=2026
 ```
 
-Numerical tests:
+If the base models and SHP are not already available locally, download them:
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 python -m unittest discover -s tests -p 'test_*.py' -v
+python - <<'PYTHON'
+import os
+from huggingface_hub import snapshot_download
+
+snapshot_download("Qwen/Qwen2.5-3B-Instruct", local_dir=os.environ["MODEL_3B"])
+snapshot_download("Qwen/Qwen2.5-7B-Instruct", local_dir=os.environ["MODEL_7B"])
+domains = ["askacademia", "askculinary", "askengineers", "asksciencefiction", "changemyview"]
+snapshot_download("stanfordnlp/SHP", repo_type="dataset", local_dir=os.environ["DATA_ROOT"],
+                  allow_patterns=[f"{domain}/*.json" for domain in domains])
+PYTHON
 ```
 
-## Run the algorithms
+The dataset layout is `DATA_ROOT/DOMAIN/{train,validation,test}.json`. Files may
+contain JSON arrays or JSON Lines. Records require `domain`, `history`,
+`human_ref_A`, `human_ref_B`, and `labels`. The domain field is `DOMAIN_SPLIT`;
+label 1 prefers A and label 0 prefers B.
+
+## Run the pipeline
+
+Execute these stages in order:
 
 ```bash
-# In-memory synthetic candidates; JSON results go to standard output.
-PYTHON_BIN=python bash scripts/run_algorithms.sh --synthetic
+# 1. Train one 3B proxy and one 7B judge adapter for each of the five domains.
+bash scripts/run_pipeline.sh train
 
-# Inspect the complete argument list.
-python -B -m pessimism.run --help
+# 2. Generate validation and test responses with the unmodified 3B base model.
+bash scripts/run_pipeline.sh generate
 
-# Real inputs must be supplied explicitly; this is a placeholder, not a path.
-python -B -m pessimism.run --input '<SCORED_POOL_JSON>' --budget 255 --seed 2026
+# 3. Score every response with both trained domain-specific adapters.
+bash scripts/run_pipeline.sh score
+
+# 4. Calibrate on validation pools and export test inputs for the algorithms.
+bash scripts/run_pipeline.sh prepare
+
+# 5. Run all six methods with a shared budget of 255 responses per input.
+bash scripts/run_pipeline.sh run
 ```
 
-Each input group supplies ordered candidate IDs and normalized proxy scores,
-with an optional Judge score used only for evaluation.
+Alternatively, `bash scripts/run_pipeline.sh all` runs all five stages for a
+fresh `RUN_ROOT`. Generation, scoring, and preparation refuse to overwrite
+existing outputs. Stages can also be invoked independently through
+`python reward_training/response_pool.py --help`.
 
-See [the algorithm guide](pessimism/README.md) for the complete JSON schema and parameter conventions.
-Specify error bounds and normalization using a calibration protocol appropriate
-for your experiment.
+Training uses learning rate `5e-6`, two epochs, maximum length 1,024, AdamW,
+weight decay 0.05, cosine scheduling, and 3% warmup. Both models use 4-bit NF4
+QLoRA with double quantization, FP16 computation, gradient checkpointing,
+rank 64, alpha 32, dropout 0.1, and attention targets `q_proj`, `k_proj`,
+`v_proj`, and `o_proj`. The scalar score head is also trained. The 3B model
+uses batch size 4 and four accumulation steps; the 7B model uses batch size 2
+and eight accumulation steps. Both therefore use 16 preference pairs per
+optimizer update. Training and data seeds are 2026 by default.
 
-Fixed-beta runs bypass the certified beta set and are empirical comparisons.
+Each domain has 50 test prompts with 256 responses per prompt, plus 20
+validation prompts with 32 responses per prompt for calibration. Prompts are
+unique valid SHP histories selected in a deterministic hash order. Generation
+uses temperature 0.7, top-p 0.8, top-k 20, repetition penalty 1.05, at most
+1,024 prompt tokens and 512 new tokens. Candidate order is preserved during
+scoring and algorithm execution. Scoring reuses each adapter's saved precision,
+chat template, and maximum sequence length.
 
-## Reward-model training
+The preparation stage fits a separate min–max scale for each domain and scorer
+on validation responses, applies those frozen scales to test scores, and clips
+to [0, 1]. It supplies validation proxy–judge RMSE as the algorithms' error
+parameter. This is an empirical calibration recipe, not a certified population
+error bound. Test judge scores are used only to evaluate the algorithms. Fixed
+beta and the default finite-pool settings are empirical comparisons; this
+pipeline does not encode every paper-specific sweep.
 
-Install the optional dependencies and consult the training guide:
+The exported `pool_00000.json`, for example, contains the first test prompt from
+each domain; its budget is shared across those five domain groups. Each method
+sees the same ordered candidates. Results are written separately for every
+prompt index and include allocations, selected responses, selection
+probabilities, and proxy/judge reward summaries.
+
+| Output under `RUN_ROOT` | Contents |
+| --- | --- |
+| `rm_3b/DOMAIN/`, `judge_7b/DOMAIN/` | Trained adapters, scalar heads, tokenizers, and training settings |
+| `pools/DOMAIN/SPLIT.raw.json` | Prompts and generated response text |
+| `pools/DOMAIN/SPLIT.proxy.json` | Responses with raw 3B scores |
+| `pools/DOMAIN/SPLIT.scored.json` | Responses with both raw 3B and 7B scores |
+| `calibration.json` | Validation normalization scales and empirical RMSE |
+| `algorithm_inputs/pool_*.json` | Normalized test inputs for all six methods |
+| `algorithm_inputs/manifest.json` | Prompt mapping and calibration metadata |
+| `results/seed_2026/pool_*.json` | Algorithm outputs for each prompt index |
+
+Use `bash scripts/run_pipeline.sh --help` for optional pool-size and batch-size
+environment variables. `SEED=2027 bash scripts/run_pipeline.sh run` repeats
+algorithm selection with another seed on the same fixed pools. To customize
+algorithm parameters directly:
 
 ```bash
-python -m pip install -r reward_training/requirements.txt
-bash reward_training/scripts/train_rm.sh --help
-bash reward_training/scripts/train_rm_fsdp.sh --help
-bash reward_training/scripts/validate_rm.sh --help
+python -m pessimism.run --input "$RUN_ROOT/algorithm_inputs/pool_00000.json" \
+  --budget 255 --seed 2026 --alpha 1 --fixed-beta 0.1 \
+  --output "$RUN_ROOT/results/custom.json"
 ```
 
-The [training guide](reward_training/README.md) gives the exact local data schemas,
-training, validation, configuration checks, and offline smoke-test commands.
-Base-model, dataset, checkpoint, and output locations are always runtime inputs.
+See [algorithm options](pessimism/README.md) and
+[training and validation commands](reward_training/README.md).
 
-For pairwise training, the local dataset root contains `DOMAIN/train.json` and
-`DOMAIN/validation.json` (JSON arrays or JSON Lines). Required fields are
-`domain`, `history`, `human_ref_A`, `human_ref_B`, and `labels`. The `domain`
-field must equal `DOMAIN_train` or `DOMAIN_validation`; label 1 prefers A and
-label 0 prefers B.
+## Tests
 
 ```bash
-# Pairwise LoRA. All angle-bracket values are placeholders to replace.
-bash reward_training/scripts/train_rm.sh \
-  --model_path '<BASE_MODEL_DIR>' --dataset_path '<PAIRWISE_DATA_ROOT>' \
-  --domain '<DOMAIN>' --output_dir '<NEW_OUTPUT_DIR>' \
-  --no-load_in_4bit --bf16
-
-# For CUDA QLoRA, install these extra dependencies and use --load_in_4bit.
-python -m pip install -r reward_training/requirements-qlora.txt
-
-# Single-machine full-parameter FSDP; choose the model's decoder layer class.
-bash reward_training/scripts/train_rm_fsdp.sh \
-  --num_processes 2 --wrap_class '<DECODER_LAYER_CLASS>' --mixed_precision bf16 -- \
-  --model_path '<BASE_MODEL_DIR>' --dataset_path '<PAIRWISE_DATA_ROOT>' \
-  --domain '<DOMAIN>' --output_dir '<NEW_OUTPUT_DIR>'
-
-# Evaluate a trained pairwise adapter.
-bash reward_training/scripts/validate_rm.sh \
-  --model_path '<BASE_MODEL_DIR>' --adapter_path '<ADAPTER_DIR>' \
-  --dataset_path '<PAIRWISE_DATA_ROOT>' --domain '<DOMAIN>' \
-  --output_dir '<NEW_VALIDATION_OUTPUT_DIR>' --no-load_in_4bit --bf16
-```
-
-Run the optional training tests on CPU with generated text and randomly
-initialized tiny models, including actual training and save/reload checks:
-
-```bash
-cd reward_training
+python -m unittest discover -s tests -v
 PYTHONDONTWRITEBYTECODE=1 HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 \
-  TOKENIZERS_PARALLELISM=false PYTHONPATH=. \
-  python -m unittest discover -s tests -v
+  TOKENIZERS_PARALLELISM=false PYTHONPATH=reward_training \
+  python -m unittest discover -s reward_training/tests -v
 ```
 
-Executed with Python 3.13.2, NumPy 1.26.4, PyTorch 2.6.0, Transformers 4.55.2,
-PEFT 0.17.1, Datasets 3.6.0, and Accelerate 1.10.1. This used an existing
-environment; a fresh dependency installation was not tested. CUDA QLoRA,
-mixed-precision GPU training, and multi-GPU FSDP were not executed. The generated
-FSDP launch configuration was checked with Accelerate's configuration parser.
+The tests use small in-memory fixtures and temporary tiny models; they do not
+require downloading the production checkpoints or launching GPU training.

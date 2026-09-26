@@ -2,6 +2,8 @@
 
 Train scalar reward models with the Bradley-Terry preference loss using
 LoRA/QLoRA or full-parameter FSDP. Model and data locations are runtime inputs.
+The [main pipeline](../README.md) trains both the 3B proxy and 7B judge,
+generates responses, scores pools, and runs the allocation algorithms.
 Run the commands below from the repository root.
 
 ```bash
@@ -42,12 +44,12 @@ bash reward_training/scripts/validate_rm.sh --full_model \
   --domain '<DOMAIN>' --output_dir '<VALIDATION_OUTPUT_DIR>' \
   --no-load_in_4bit --bf16
 
-# All options, including configuration checks and smoke-test settings.
+# All options, including configuration checks.
 bash reward_training/scripts/train_rm.sh --help
 bash reward_training/scripts/train_rm_fsdp.sh --help
 bash reward_training/scripts/validate_rm.sh --help
 
-# CPU tests with synthetic data and randomly initialized tiny models.
+# CPU training and inference checks using temporary tiny models.
 PYTHONDONTWRITEBYTECODE=1 HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 \
   TOKENIZERS_PARALLELISM=false PYTHONPATH=reward_training \
   python -m unittest discover -s reward_training/tests -v
@@ -55,3 +57,14 @@ PYTHONDONTWRITEBYTECODE=1 HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 \
 
 Set `PYTHON_BIN` to choose the scripts' Python interpreter. FSDP saves model
 weights only by default; these checkpoints do not include optimizer state.
+
+Pool generation and scoring use the same tokenization and model-loading code as
+training. Scoring reads precision and sequence-length settings from the adapter's
+saved `training_arguments.json`:
+
+```bash
+python reward_training/response_pool.py generate --help
+python reward_training/response_pool.py score --help
+python reward_training/response_pool.py calibrate --help
+python reward_training/response_pool.py export --help
+```

@@ -1,2 +1,2 @@
-# CPU-only algorithm demos and tests; model training has separate dependencies.
+# CPU allocation algorithms; model training and inference have separate dependencies.
 numpy>=1.26,<3

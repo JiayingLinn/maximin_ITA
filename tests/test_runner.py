@@ -11,7 +11,7 @@ import unittest
 import numpy as np
 
 from pessimism.core.validation import PessimismValidationError
-from pessimism.input_data import ProxyStream, load_pool, parse_pool, synthetic_document
+from pessimism.input_data import ProxyStream, load_pool, parse_pool
 from pessimism.run import METHODS, run_comparison
 
 
@@ -20,7 +20,13 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class RunnerTests(unittest.TestCase):
     def setUp(self):
-        self.document = synthetic_document(3, 32, seed=11)
+        self.document = {"r_max": 1.0, "groups": [
+            {"id": f"group_{i}", "error_bound": 0.05 * (i + 1),
+             "candidates": [{"id": f"candidate_{j}",
+                             "proxy_score": ((7 * j + i) % 31) / 31,
+                             "judge_score": ((7 * j + i + 2) % 31) / 31}
+                            for j in range(32)]}
+            for i in range(3)]}
         self.pool = parse_pool(self.document)
 
     def test_every_method_spends_same_global_budget(self):
@@ -186,30 +192,30 @@ class RunnerTests(unittest.TestCase):
             with self.assertRaisesRegex(PessimismValidationError, "duplicate JSON field"):
                 load_pool(path)
 
-    def test_cli_synthetic_and_file_input_agree(self):
+    def test_cli_file_and_function_agree(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            subprocess.run(
-                [sys.executable, "scripts/make_synthetic_pool.py", "--seed", "11", "--candidates", "32", "--output", str(root / "pool.json")],
-                cwd=ROOT, check=True, capture_output=True, text=True,
-            )
+            (root / "pool.json").write_text(json.dumps(self.document))
             common = [sys.executable, "-m", "pessimism.run", "--budget", "21", "--seed", "4"]
             a = subprocess.run(common + ["--input", str(root / "pool.json")], cwd=ROOT,
                                check=True, capture_output=True, text=True)
-            b = subprocess.run(common + ["--synthetic", "--synthetic-seed", "11", "--synthetic-candidates", "32"],
-                               cwd=ROOT, check=True, capture_output=True, text=True)
-            self.assertEqual(json.loads(a.stdout)["methods"], json.loads(b.stdout)["methods"])
-            subprocess.run(common + ["--synthetic", "--output", str(root / "nested" / "result.json")],
+            expected = run_comparison(self.pool, budget=21, seed=4)
+            self.assertEqual(json.loads(a.stdout)["methods"], expected["methods"])
+            subprocess.run(common + ["--input", str(root / "pool.json"), "--output", str(root / "nested" / "result.json")],
                            cwd=ROOT, check=True, capture_output=True, text=True)
             self.assertTrue((root / "nested" / "result.json").is_file())
 
     def test_cli_requires_source_and_reports_invalid_input(self):
-        for args in ([], ["--synthetic", "--budget", "0"], ["--synthetic", "--beta-grid", "0.1,nan"]):
-            result = subprocess.run([sys.executable, "-m", "pessimism.run", *args], cwd=ROOT,
-                                    capture_output=True, text=True)
-            self.assertEqual(result.returncode, 2)
-            self.assertIn("error:", result.stderr)
-            self.assertNotIn("Traceback", result.stderr)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "pool.json"
+            path.write_text(json.dumps(self.document))
+            for args in ([], ["--input", str(path), "--budget", "0"],
+                         ["--input", str(path), "--beta-grid", "0.1,nan"]):
+                result = subprocess.run([sys.executable, "-m", "pessimism.run", *args], cwd=ROOT,
+                                        capture_output=True, text=True)
+                self.assertEqual(result.returncode, 2)
+                self.assertIn("error:", result.stderr)
+                self.assertNotIn("Traceback", result.stderr)
 
 
 if __name__ == "__main__":

@@ -13,7 +13,7 @@ from .core.validation import (
     PessimismValidationError, require_beta_grid, require_confidence_delta,
     require_nonnegative_float, require_positive_float, require_positive_int,
 )
-from .input_data import CandidatePool, ProxyStream, load_pool, parse_pool, synthetic_document
+from .input_data import CandidatePool, ProxyStream, load_pool
 
 
 METHODS = (
@@ -210,12 +210,8 @@ def run_comparison(
 
 def build_parser():
     parser = argparse.ArgumentParser(description=__doc__)
-    source = parser.add_mutually_exclusive_group(required=True)
-    source.add_argument("--input", type=Path, help="Portable JSON candidate pool supplied by the caller")
-    source.add_argument("--synthetic", action="store_true", help="Use generated demonstration data")
-    parser.add_argument("--synthetic-groups", type=int, default=3)
-    parser.add_argument("--synthetic-candidates", type=int, default=64)
-    parser.add_argument("--synthetic-seed", type=int, default=0)
+    parser.add_argument("--input", type=Path, required=True,
+                        help="Scored candidate pool exported by reward_training/response_pool.py")
     parser.add_argument("--methods", nargs="+", choices=METHODS, default=list(METHODS))
     parser.add_argument("--budget", type=int, default=60, help="Global count, including initialization")
     parser.add_argument("--seed", type=int, default=0)
@@ -238,9 +234,7 @@ def main(argv=None):
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
-        pool = load_pool(args.input) if args.input is not None else parse_pool(
-            synthetic_document(args.synthetic_groups, args.synthetic_candidates, args.synthetic_seed)
-        )
+        pool = load_pool(args.input)
         result = run_comparison(
             pool, methods=args.methods, budget=args.budget, seed=args.seed,
             beta_grid=[float(value) for value in args.beta_grid.split(",")],
@@ -249,12 +243,7 @@ def main(argv=None):
             capacity_mode=args.capacity_mode, allocation_batch_size=args.allocation_batch_size,
             index_error_scale=args.index_error_scale,
         )
-        result["source"] = "synthetic" if args.synthetic else "caller_supplied_pool"
-        if args.synthetic:
-            result["synthetic_settings"] = {
-                "groups": args.synthetic_groups, "candidates_per_group": args.synthetic_candidates,
-                "seed": args.synthetic_seed,
-            }
+        result["source"] = "caller_supplied_pool"
         text = json.dumps(result, indent=2, allow_nan=False) + "\n"
         if args.output is None:
             print(text, end="")

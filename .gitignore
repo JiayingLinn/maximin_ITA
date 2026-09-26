@@ -13,6 +13,8 @@ data/
 datasets/
 models/
 checkpoints/
+pools/
+calibration/
 *.log
 *.jsonl
 *.parquet

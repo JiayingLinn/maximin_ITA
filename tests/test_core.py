@@ -1,4 +1,4 @@
-"""Analytical and allocation regression tests using synthetic scores only.
+"""Analytical and allocation regression tests using fixture scores only.
 
 These checks cover the ITP oracle, certification schedule, adaptive allocation,
 finite capacity, fixed-beta variants, and equal/greedy best-of-n baselines.
@@ -33,7 +33,7 @@ TIGHT = 1e-12
 
 
 class PoolExhausted(RuntimeError):
-    """The synthetic test stream has no further samples."""
+    """The fixture test stream has no further samples."""
 
 
 def exact_normalizer(scores, beta, iterations=400):

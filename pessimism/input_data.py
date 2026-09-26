@@ -1,11 +1,9 @@
-"""Portable, pre-scored candidate pools; no model or dataset integration."""
+"""Portable, pre-scored candidate pools for the allocation algorithms."""
 
 from dataclasses import dataclass
 import json
 import math
 from pathlib import Path
-
-import numpy as np
 
 from .core.validation import PessimismValidationError, require_positive_int
 
@@ -143,26 +141,3 @@ class ProxyStream:
             )
         self.counts[group] = end
         return list(ids[start:end]), list(scores[start:end])
-
-
-def synthetic_document(num_groups=3, candidates_per_group=64, seed=0):
-    """Small generated data only; the Judge field is a synthetic reference."""
-    num_groups = require_positive_int(num_groups, "num_groups")
-    candidates_per_group = require_positive_int(candidates_per_group, "candidates_per_group")
-    if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
-        raise PessimismValidationError("seed must be a nonnegative integer")
-    rng = np.random.default_rng(seed)
-    groups = []
-    for i in range(num_groups):
-        error = 0.05 + 0.05 * (i % 4)
-        judge = rng.beta(1.5 + 0.6 * (i % 5), 4.0, candidates_per_group)
-        proxy = np.clip(judge + rng.normal(0, error, candidates_per_group), 0, 1)
-        groups.append({
-            "id": f"group_{i}", "error_bound": error,
-            "candidates": [
-                {"id": f"candidate_{j}", "proxy_score": float(proxy[j]),
-                 "judge_score": float(judge[j])}
-                for j in range(candidates_per_group)
-            ],
-        })
-    return {"r_max": 1.0, "groups": groups}
