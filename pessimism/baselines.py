@@ -1,13 +1,13 @@
 """Non-adaptive comparisons for the LCB-Greedy allocation.
 
 None of this is part of Algorithm 1 or Algorithm 2. It exists so that a run can
-answer "compared with what?": the allocation rule and the ITP selection rule are
+answer "compared with what?": the allocation rule and the BGP selection rule are
 two separate choices, and only a baseline that changes one of them at a time
 says which one a difference came from.
 
-* `uniform_itp` keeps the ITP oracle and replaces the adaptive allocation with
+* `uniform_bgp` keeps the BGP oracle and replaces the adaptive allocation with
   an equal split. A difference against it is attributable to the allocation.
-* `uniform_argmax` keeps the equal split and replaces the ITP draw with
+* `uniform_argmax` keeps the equal split and replaces the BGP draw with
   best-of-n's arg max, which is what `shp_rm.bon` already does. A difference
   against it is attributable to the selection rule, and it is the bridge to the
   numbers already in RESULTS.md.
@@ -23,7 +23,7 @@ from typing import Any, Callable, Hashable, Optional, Sequence
 
 import numpy as np
 
-from .core.itp import itp_sample
+from .core.bgp import bgp_sample
 from .core.lcb_greedy import GroupOutcome, group_index
 from .core.radii import CertificationSchedule
 from .core.validation import PessimismValidationError
@@ -53,7 +53,7 @@ def even_split(total_budget: int, num_groups: int) -> list[int]:
     return [base + (1 if i < remainder else 0) for i in range(num_groups)]
 
 
-def uniform_itp(
+def uniform_bgp(
     group_ids: Sequence[Hashable],
     total_budget: int,
     error_bounds: Sequence[float],
@@ -65,7 +65,7 @@ def uniform_itp(
     error_scale: float = 1.0,
     error_decay: float = 0.0,
 ) -> BaselineResult:
-    """Equal allocation, then the same INDEX and ITP-Sample per group.
+    """Equal allocation, then the same INDEX and BGP-Sample per group.
 
     ``fixed_beta`` mirrors :func:`lcb_greedy`: it deliberately bypasses the
     certified beta set and is therefore an empirical/uncertified ablation.
@@ -101,7 +101,7 @@ def uniform_itp(
             values, candidates, bounds[group], schedule.bisection_tol,
             **scale_options,
         )
-        sampled = itp_sample(
+        sampled = bgp_sample(
             responses, values, index.beta, bounds[group], schedule.bisection_tol,
             rng, **scale_options,
         )
@@ -126,7 +126,7 @@ def uniform_itp(
         final_counts=counts,
         total_revealed=sum(counts.values()),
         schedule=schedule,
-        rule="uniform_itp",
+        rule="uniform_bgp",
     )
 
 

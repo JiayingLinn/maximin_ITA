@@ -75,7 +75,7 @@ def log_factor(
 
 
 def m_beta(beta: float, r_max: float) -> float:
-    """`M_beta = 1 + R_max / beta`, the sup of the ITP weight at that beta."""
+    """`M_beta = 1 + R_max / beta`, the sup of the BGP weight at that beta."""
     return 1.0 + r_max / beta
 
 
@@ -85,13 +85,13 @@ def delta_obj(n: int, beta: float, r_max: float, ell: float) -> float:
     return 5.0 * r_max * (math.sqrt(ratio) + ratio)
 
 
-def delta_itp(n: int, beta: float, r_max: float, ell: float) -> float:
+def delta_bgp(n: int, beta: float, r_max: float, ell: float) -> float:
     """`R_max sqrt(M ell / n)`."""
     return r_max * math.sqrt(m_beta(beta, r_max) * ell / n)
 
 
 def delta_total(n: int, beta: float, r_max: float, ell: float) -> float:
-    """`delta_obj + delta_itp = 6 R_max sqrt(M ell / n) + 5 R_max M ell / n`."""
+    """`delta_obj + delta_bgp = 6 R_max sqrt(M ell / n) + 5 R_max M ell / n`."""
     ratio = m_beta(beta, r_max) * ell / n
     return 6.0 * r_max * math.sqrt(ratio) + 5.0 * r_max * ratio
 
@@ -213,7 +213,7 @@ class CertificationSchedule:
                     f"min_initial_count={floor} is below the smallest count "
                     f"that certifies any beta at slack={slack:g}, which is "
                     f"{certifiable}. The certified set is empty at {floor}, so "
-                    "ITP-Certify would have no beta to choose from. Raise the "
+                    "BGP-Certify would have no beta to choose from. Raise the "
                     "slack (a larger slack lowers the certifiable count) or "
                     "raise the floor."
                 )

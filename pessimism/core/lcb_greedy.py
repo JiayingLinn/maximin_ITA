@@ -1,4 +1,4 @@
-"""LCB-Greedy allocation over groups with finite-sample ITP oracles.
+"""LCB-Greedy allocation over groups with finite-sample BGP oracles.
 
 The paper's rule gives the next batch to the group whose certificate is currently
 lowest and makes that batch as large as everything that group already has.  The
@@ -22,7 +22,7 @@ from typing import Any, Callable, Hashable, Optional, Sequence
 
 import numpy as np
 
-from .itp import ITPCertification, ITPSampleResult, itp_certify, itp_sample
+from .bgp import BGPCertification, BGPSampleResult, bgp_certify, bgp_sample
 from .radii import CertificationSchedule
 from .validation import (
     PessimismValidationError,
@@ -44,7 +44,7 @@ class GroupIndex:
 
     index_value: float
     beta: float
-    certification: ITPCertification
+    certification: BGPCertification
     count: int
     certificates: dict[float, float]
 
@@ -110,7 +110,7 @@ class GroupOutcome:
     selection_probability: float
     selected_response: Any
     selected_score: float
-    sample_result: ITPSampleResult = field(repr=False)
+    sample_result: BGPSampleResult = field(repr=False)
 
     def as_dict(self) -> dict:
         return {
@@ -214,7 +214,7 @@ def group_index(
             "INDEX was called with an empty certified set; no beta is "
             "certifiable at this sample count"
         )
-    best: Optional[ITPCertification] = None
+    best: Optional[BGPCertification] = None
     certificates: dict[float, float] = {}
     for beta in grid:
         certify_options: dict = {}
@@ -225,7 +225,7 @@ def group_index(
         if error_decay != 0.0:
             certify_options["error_decay"] = error_decay
             certify_options["decay_count"] = decay_count
-        certification = itp_certify(
+        certification = bgp_certify(
             array, float(beta), error_bound, bisection_tol, **certify_options
         )
         certificates[float(beta)] = certification.certificate
@@ -236,7 +236,7 @@ def group_index(
     assert best is not None
     # The beta is settled; only the number it reports upward can still change.
     # `certification` stays the one that picked the beta, because that is the
-    # object `itp_sample` re-derives at selection time and checks against.
+    # object `bgp_sample` re-derives at selection time and checks against.
     if index_error_scale is None or index_error_scale == error_scale:
         index_value = best.certificate
     else:
@@ -248,7 +248,7 @@ def group_index(
         if error_decay != 0.0:
             index_options["error_decay"] = error_decay
             index_options["decay_count"] = decay_count
-        index_value = itp_certify(
+        index_value = bgp_certify(
             array, best.beta, error_bound, bisection_tol, **index_options
         ).certificate
     return GroupIndex(
@@ -477,7 +477,7 @@ def lcb_greedy(
         if error_decay != 0.0:
             sample_options["error_decay"] = error_decay
             sample_options["decay_count"] = schedule.initial_count
-        sampled = itp_sample(
+        sampled = bgp_sample(
             responses=stored_responses[group][:n],
             scores=stored_scores[group][:n],
             beta=current.beta,
@@ -486,7 +486,7 @@ def lcb_greedy(
             rng=rng,
             **sample_options,
         )
-        # The cached certification and the one recomputed inside itp_sample come
+        # The cached certification and the one recomputed inside bgp_sample come
         # from the same scores and beta, so they must agree bit for bit; a
         # mismatch means the stored state drifted from the index. The comparison
         # is against the certificate that *picked* beta, not against the number

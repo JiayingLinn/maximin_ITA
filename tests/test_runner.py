@@ -41,7 +41,7 @@ class RunnerTests(unittest.TestCase):
                     self.assertLess(row["selected_index"], row["count"])
                     self.assertAlmostEqual(sum(row["selection_probabilities"]), 1)
                     self.assertTrue(all(p >= 0 for p in row["selection_probabilities"]))
-        for method in ("uniform_argmax", "uniform_itp_auto", "uniform_itp_fixed"):
+        for method in ("uniform_argmax", "uniform_bgp_auto", "uniform_bgp_fixed"):
             self.assertEqual(list(report["methods"][method]["final_counts"].values()), [11, 10, 10])
 
     def test_deterministic_and_independent_of_method_order(self):
@@ -134,7 +134,7 @@ class RunnerTests(unittest.TestCase):
 
     def test_fixed_beta_and_alpha_are_recorded(self):
         report = run_comparison(self.pool, budget=30, fixed_beta=0.0001, alpha=0.5)
-        for method in ("uniform_itp_fixed", "lcb_greedy_fixed"):
+        for method in ("uniform_bgp_fixed", "lcb_greedy_fixed"):
             for group, row in zip(self.pool.groups, report["methods"][method]["groups"]):
                 self.assertEqual(row["beta"], 0.0001)
                 self.assertAlmostEqual(row["effective_error"], group.error_bound * 0.5)

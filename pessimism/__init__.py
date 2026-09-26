@@ -1,4 +1,4 @@
-"""Paper-faithful LCB-Greedy allocation with finite-sample ITP oracles.
+"""Paper-faithful LCB-Greedy allocation with finite-sample BGP oracles.
 
 `core` holds Algorithm 1 and Algorithm 2 exactly as the paper states them and
 depends on nothing but NumPy. `adapters` turns this repository's stored
@@ -6,11 +6,11 @@ response pools into the ordered sample-and-score stream Algorithm 1 consumes.
 Nothing in `core` knows what a domain, a prompt, or a reward model is.
 """
 
-from .core.itp import (
-    ITPCertification,
-    ITPSampleResult,
-    itp_certify,
-    itp_sample,
+from .core.bgp import (
+    BGPCertification,
+    BGPSampleResult,
+    bgp_certify,
+    bgp_sample,
 )
 from .core.lcb_greedy import (
     AllocationStep,
@@ -24,7 +24,7 @@ from .core.radii import (
     CertificationSchedule,
     certified_betas,
     default_bisection_tol,
-    delta_itp,
+    delta_bgp,
     delta_obj,
     delta_total,
     geometric_beta_grid,
@@ -39,20 +39,20 @@ __all__ = [
     "CertificationSchedule",
     "GroupIndex",
     "GroupOutcome",
-    "ITPCertification",
-    "ITPSampleResult",
+    "BGPCertification",
+    "BGPSampleResult",
     "LCBGreedyResult",
     "PessimismValidationError",
     "certified_betas",
     "default_bisection_tol",
-    "delta_itp",
+    "delta_bgp",
     "delta_obj",
     "delta_total",
     "geometric_beta_grid",
     "group_index",
     "initial_count",
-    "itp_certify",
-    "itp_sample",
+    "bgp_certify",
+    "bgp_sample",
     "lcb_greedy",
     "log_factor",
     "m_beta",

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import numpy as np
 
-from .baselines import even_split, greedy_argmax, uniform_argmax, uniform_itp
+from .baselines import even_split, greedy_argmax, uniform_argmax, uniform_bgp
 from .core.lcb_greedy import lcb_greedy
 from .core.radii import CertificationSchedule, delta_total, log_factor
 from .core.validation import (
@@ -17,7 +17,7 @@ from .input_data import CandidatePool, ProxyStream, load_pool
 
 
 METHODS = (
-    "uniform_argmax", "greedy_argmax", "uniform_itp_auto", "uniform_itp_fixed",
+    "uniform_argmax", "greedy_argmax", "uniform_bgp_auto", "uniform_bgp_fixed",
     "lcb_greedy_auto", "lcb_greedy_fixed",
 )
 DEFAULT_GRID = (0.01, 0.03, 0.1, 0.3, 1.0, 3.0)
@@ -73,10 +73,10 @@ def run_comparison(
             raise PessimismValidationError(
                 "equal allocation exceeds a group's capacity; uniform methods do not redistribute"
             )
-    needs_itp = any("itp" in method or method.startswith("lcb_") for method in methods)
+    needs_bgp = any("bgp" in method or method.startswith("lcb_") for method in methods)
     schedule = None
     automatic_slack = slack is None
-    if needs_itp:
+    if needs_bgp:
         if slack is None:
             ell = log_factor(len(groups), len(grid), budget, confidence_delta)
             slack = delta_total(initial_count, float(grid[-1]), pool.r_max, ell)
@@ -99,8 +99,8 @@ def run_comparison(
         elif method == "greedy_argmax":
             result = greedy_argmax(groups, budget, stream,
                                    capacity=capacities if capacity_mode == "capped" else None)
-        elif method.startswith("uniform_itp_"):
-            result = uniform_itp(groups, budget, bounds, schedule, stream, rng,
+        elif method.startswith("uniform_bgp_"):
+            result = uniform_bgp(groups, budget, bounds, schedule, stream, rng,
                                  fixed_beta=pinned, error_scale=alpha)
         else:
             result = lcb_greedy(
@@ -112,11 +112,11 @@ def run_comparison(
                 min_initial_count=initial_count,
             )
             history = [step.as_dict() for step in result.history]
-        is_itp = method not in ("uniform_argmax", "greedy_argmax")
+        is_bgp = method not in ("uniform_argmax", "greedy_argmax")
         rows = []
         # This is the first point where evaluation scores are accessed.
         for group in pool.groups:
-            if is_itp:
+            if is_bgp:
                 outcome = result.outcomes[group.id]
                 count, selected = outcome.final_count, outcome.selected_index
                 probabilities = outcome.sample_result.probabilities
@@ -156,7 +156,7 @@ def run_comparison(
             "Expected scores integrate the final selection law over revealed candidates, "
             "conditional on this allocation; they are not population reward estimates.",
         ]
-        if is_itp:
+        if is_bgp:
             caveats.append(
                 "Certificates require valid external L2 error bounds, bounded rewards, "
                 "the stated sampling assumptions, and the algorithm's theoretical settings. "
@@ -179,7 +179,7 @@ def run_comparison(
         capped_steps = (
             sum(bool(step["capped"] or step["excluded"]) for step in history)
             if history else
-            (max(value.get("capped_steps", 0) for value in result.values()) if not is_itp else 0)
+            (max(value.get("capped_steps", 0) for value in result.values()) if not is_bgp else 0)
         )
         if capacity_mode == "capped" and method.startswith(("greedy_", "lcb_")):
             caveats.append("Finite-pool capacity checks can exclude exhausted groups or shorten a batch; this differs from unlimited sampling.")
@@ -189,7 +189,7 @@ def run_comparison(
             "metrics": {name: _metrics([row[name] for row in rows]) for name in metric_names},
             "capacity_affected_steps": capped_steps, "caveats": caveats,
         }
-        if is_itp:
+        if is_bgp:
             method_result["schedule"] = schedule.as_dict()
         if method.startswith("lcb_"):
             method_result["allocation_history"] = history
@@ -199,7 +199,7 @@ def run_comparison(
         "settings": {"budget": budget, "seed": seed, "r_max": pool.r_max,
                      "alpha": alpha, "fixed_beta": fixed_beta, "beta_grid": grid.tolist(),
                      "requested_initial_count": initial_count, "slack": slack,
-                     "slack_source": "derived_from_initial_count" if needs_itp and automatic_slack else "explicit" if slack is not None else "unused",
+                     "slack_source": "derived_from_initial_count" if needs_bgp and automatic_slack else "explicit" if slack is not None else "unused",
                      "confidence_delta": confidence_delta, "capacity_mode": capacity_mode,
                      "capacities": capacities, "allocation_batch_size": allocation_batch_size,
                      "index_error_scale": index_error_scale,

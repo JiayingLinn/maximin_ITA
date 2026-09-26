@@ -1,6 +1,6 @@
 """Analytical and allocation regression tests using fixture scores only.
 
-These checks cover the ITP oracle, certification schedule, adaptive allocation,
+These checks cover the BGP oracle, certification schedule, adaptive allocation,
 finite capacity, fixed-beta variants, and equal/greedy best-of-n baselines.
 No model, judge, dataset, or original response pool is needed.
 """
@@ -11,15 +11,15 @@ from unittest.mock import patch
 
 import numpy as np
 
-from pessimism.baselines import even_split, greedy_argmax, uniform_argmax, uniform_itp
+from pessimism.baselines import even_split, greedy_argmax, uniform_argmax, uniform_bgp
 from pessimism.core import lcb_greedy as lcb_module
-from pessimism.core.itp import itp_certify, itp_sample
+from pessimism.core.bgp import bgp_certify, bgp_sample
 from pessimism.core.lcb_greedy import group_index, lcb_greedy
 from pessimism.core.radii import (
     CertificationSchedule,
     certified_betas,
     default_bisection_tol,
-    delta_itp,
+    delta_bgp,
     delta_obj,
     delta_total,
     geometric_beta_grid,
@@ -51,13 +51,13 @@ def exact_normalizer(scores, beta, iterations=400):
     return 0.5 * (low + high)
 
 
-class TestITPFormulas(unittest.TestCase):
+class TestBGPFormulas(unittest.TestCase):
     """Spec 8.1: Algorithm 2 against its closed forms."""
 
     def test_constant_scores(self):
         for constant, beta, bound in ((0.7, 0.3, 0.1), (0.0, 1.0, 0.0), (1.0, 0.05, 0.25)):
             with self.subTest(constant=constant, beta=beta):
-                certification = itp_certify([constant] * 11, beta, bound, TIGHT)
+                certification = bgp_certify([constant] * 11, beta, bound, TIGHT)
                 self.assertAlmostEqual(certification.normalizer, constant - beta, places=9)
                 np.testing.assert_allclose(certification.weights, 1.0, atol=1e-9)
                 self.assertAlmostEqual(
@@ -65,35 +65,35 @@ class TestITPFormulas(unittest.TestCase):
                     constant - bound - bound * bound / (2.0 * beta),
                     places=9,
                 )
-                sampled = itp_sample(
+                sampled = bgp_sample(
                     list(range(11)), [constant] * 11, beta, bound, TIGHT,
                     np.random.default_rng(0),
                 )
                 np.testing.assert_allclose(sampled.probabilities, 1.0 / 11, atol=1e-9)
 
     def test_two_point_analytic_case(self):
-        certification = itp_certify([0.0, 1.0], 1.0, 0.0, TIGHT)
+        certification = bgp_certify([0.0, 1.0], 1.0, 0.0, TIGHT)
         self.assertAlmostEqual(certification.normalizer, -0.5, places=9)
         np.testing.assert_allclose(certification.weights, [0.5, 1.5], atol=1e-9)
         self.assertAlmostEqual(certification.certificate, 0.625, places=9)
-        sampled = itp_sample(
+        sampled = bgp_sample(
             ["a", "b"], [0.0, 1.0], 1.0, 0.0, TIGHT, np.random.default_rng(1)
         )
         np.testing.assert_allclose(sampled.probabilities, [0.25, 0.75], atol=1e-9)
 
     def test_thresholded_case(self):
-        certification = itp_certify([0.0, 1.0], 0.25, 0.0, TIGHT)
+        certification = bgp_certify([0.0, 1.0], 0.25, 0.0, TIGHT)
         self.assertAlmostEqual(certification.normalizer, 0.5, places=9)
         np.testing.assert_allclose(certification.weights, [0.0, 2.0], atol=1e-9)
         self.assertAlmostEqual(certification.certificate, 0.875, places=9)
-        sampled = itp_sample(
+        sampled = bgp_sample(
             ["a", "b"], [0.0, 1.0], 0.25, 0.0, TIGHT, np.random.default_rng(2)
         )
         np.testing.assert_allclose(sampled.probabilities, [0.0, 1.0], atol=1e-12)
         # A zero-weight response is never selected, in any draw.
         rng = np.random.default_rng(3)
         for _ in range(200):
-            draw = itp_sample(["a", "b"], [0.0, 1.0], 0.25, 0.0, TIGHT, rng)
+            draw = bgp_sample(["a", "b"], [0.0, 1.0], 0.25, 0.0, TIGHT, rng)
             self.assertEqual(draw.selected_index, 1)
 
     def test_weight_invariants(self):
@@ -103,12 +103,12 @@ class TestITPFormulas(unittest.TestCase):
             scores = rng.uniform(0.0, 2.5, size=n)
             beta = float(rng.uniform(0.02, 4.0))
             tol = float(rng.uniform(1e-9, 1e-3))
-            certification = itp_certify(scores, beta, 0.0, tol)
+            certification = bgp_certify(scores, beta, 0.0, tol)
             self.assertGreaterEqual(certification.weights.min(), 0.0)
             self.assertGreaterEqual(certification.mean_weight, 1.0 - 1e-9)
             self.assertLessEqual(certification.mean_weight, 1.0 + tol / beta + 1e-9)
             self.assertGreater(certification.weights.sum(), 0.0)
-            sampled = itp_sample(
+            sampled = bgp_sample(
                 list(range(n)), scores, beta, 0.0, tol, np.random.default_rng(5)
             )
             self.assertAlmostEqual(float(sampled.probabilities.sum()), 1.0, places=12)
@@ -121,7 +121,7 @@ class TestITPFormulas(unittest.TestCase):
             scores = rng.uniform(0.0, 1.0, size=int(rng.integers(2, 80)))
             beta = float(rng.uniform(0.05, 2.0))
             tol = 1e-7
-            certification = itp_certify(scores, beta, 0.0, tol)
+            certification = bgp_certify(scores, beta, 0.0, tol)
             root = exact_normalizer(scores, beta)
             # The returned normalizer is the lower endpoint: at or below the
             # root, and within one tolerance of it.
@@ -131,9 +131,9 @@ class TestITPFormulas(unittest.TestCase):
     def test_error_bound_shifts_certificate_exactly(self):
         scores = [0.1, 0.4, 0.9, 0.25]
         beta = 0.4
-        base = itp_certify(scores, beta, 0.0, TIGHT).certificate
+        base = bgp_certify(scores, beta, 0.0, TIGHT).certificate
         for bound in (0.0, 0.05, 0.3, 1.2):
-            shifted = itp_certify(scores, beta, bound, TIGHT).certificate
+            shifted = bgp_certify(scores, beta, bound, TIGHT).certificate
             self.assertAlmostEqual(
                 shifted, base - bound - bound * bound / (2.0 * beta), places=12
             )
@@ -141,15 +141,15 @@ class TestITPFormulas(unittest.TestCase):
     def test_penalty_scale_only_tempers_reward_mismatch_penalty(self):
         scores = [0.1, 0.4, 0.9, 0.25]
         beta, bound = 0.4, 0.3
-        original = itp_certify(scores, beta, bound, TIGHT)
-        explicit_one = itp_certify(
+        original = bgp_certify(scores, beta, bound, TIGHT)
+        explicit_one = bgp_certify(
             scores, beta, bound, TIGHT, penalty_scale=1.0
         )
         self.assertEqual(original.certificate, explicit_one.certificate)
         np.testing.assert_array_equal(original.weights, explicit_one.weights)
         self.assertEqual(original.raw_penalty, explicit_one.used_penalty)
 
-        quarter = itp_certify(
+        quarter = bgp_certify(
             scores, beta, bound, TIGHT, penalty_scale=0.25
         )
         self.assertEqual(quarter.normalizer, original.normalizer)
@@ -165,12 +165,12 @@ class TestITPFormulas(unittest.TestCase):
             places=15,
         )
 
-        oracle = itp_certify(scores, beta, bound, TIGHT, penalty_scale=0.0)
+        oracle = bgp_certify(scores, beta, bound, TIGHT, penalty_scale=0.0)
         self.assertEqual(oracle.used_penalty, 0.0)
         self.assertEqual(oracle.certificate, oracle.objective)
 
     def test_duplicate_responses_are_allowed(self):
-        sampled = itp_sample(
+        sampled = bgp_sample(
             ["same", "same", "same"], [0.2, 0.2, 0.9], 0.5, 0.0, TIGHT,
             np.random.default_rng(4),
         )
@@ -201,14 +201,14 @@ class TestRadii(unittest.TestCase):
             places=12,
         )
         self.assertAlmostEqual(
-            delta_itp(n, beta, self.r_max, self.ell),
+            delta_bgp(n, beta, self.r_max, self.ell),
             self.r_max * math.sqrt(ratio),
             places=12,
         )
         self.assertAlmostEqual(
             delta_total(n, beta, self.r_max, self.ell),
             delta_obj(n, beta, self.r_max, self.ell)
-            + delta_itp(n, beta, self.r_max, self.ell),
+            + delta_bgp(n, beta, self.r_max, self.ell),
             places=12,
         )
         self.assertAlmostEqual(
@@ -432,13 +432,13 @@ class TestLCBGreedy(unittest.TestCase):
 
     def test_one_categorical_draw_per_group(self):
         draws = []
-        original = lcb_module.itp_sample
+        original = lcb_module.bgp_sample
 
         def counting(**kwargs):
             draws.append(kwargs["beta"])
             return original(**kwargs)
 
-        with patch.object(lcb_module, "itp_sample", counting):
+        with patch.object(lcb_module, "bgp_sample", counting):
             result, _ = self.run_once()
         self.assertEqual(len(draws), len(self.groups))
         self.assertEqual(len(result.outcomes), len(self.groups))
@@ -459,7 +459,7 @@ class TestLCBGreedy(unittest.TestCase):
         # An exact tie has to be constructed: with a finite bisection tolerance
         # the four analytically equal certificates differ in the last bits, and
         # then the argmax is deciding, not the tie rule.
-        original = itp_certify
+        original = bgp_certify
 
         def flat(scores, beta, error_bound, bisection_tol):
             certification = original(scores, beta, error_bound, bisection_tol)
@@ -467,7 +467,7 @@ class TestLCBGreedy(unittest.TestCase):
                 **{**certification.__dict__, "certificate": 0.5}
             )
 
-        with patch.object(lcb_module, "itp_certify", flat):
+        with patch.object(lcb_module, "bgp_certify", flat):
             tied = group_index(constant, grid, 0.0, TIGHT)
         self.assertAlmostEqual(tied.beta, float(grid[0]), places=12)
         self.assertEqual(len(tied.certificates), grid.size)
@@ -488,7 +488,7 @@ class TestLCBGreedy(unittest.TestCase):
             r_max=1.0, slack=14.0, confidence_delta=0.1,
         )
         stream = Stream(make_tables())
-        baseline = uniform_itp(
+        baseline = uniform_bgp(
             self.groups, self.budget, [0.0] * 3, schedule, stream,
             np.random.default_rng(0),
         )
@@ -707,17 +707,17 @@ class TestValidation(unittest.TestCase):
         for scores in ([], [float("nan"), 0.1], [float("inf")], [[0.1, 0.2]]):
             with self.subTest(scores=scores):
                 with self.assertRaises(PessimismValidationError):
-                    itp_certify(scores, 1.0, 0.0, TIGHT)
+                    bgp_certify(scores, 1.0, 0.0, TIGHT)
 
     def test_bad_scalars(self):
         with self.assertRaises(PessimismValidationError):
-            itp_certify([0.1], 0.0, 0.0, TIGHT)
+            bgp_certify([0.1], 0.0, 0.0, TIGHT)
         with self.assertRaises(PessimismValidationError):
-            itp_certify([0.1], -1.0, 0.0, TIGHT)
+            bgp_certify([0.1], -1.0, 0.0, TIGHT)
         with self.assertRaises(PessimismValidationError):
-            itp_certify([0.1], 1.0, -0.1, TIGHT)
+            bgp_certify([0.1], 1.0, -0.1, TIGHT)
         with self.assertRaises(PessimismValidationError):
-            itp_certify([0.1], 1.0, 0.0, 0.0)
+            bgp_certify([0.1], 1.0, 0.0, 0.0)
 
     def test_bad_schedule_inputs(self):
         base = dict(
@@ -790,7 +790,7 @@ class TestValidation(unittest.TestCase):
 
     def test_misaligned_responses_and_scores(self):
         with self.assertRaises(PessimismValidationError):
-            itp_sample(["a"], [0.1, 0.2], 1.0, 0.0, TIGHT, np.random.default_rng(0))
+            bgp_sample(["a"], [0.1, 0.2], 1.0, 0.0, TIGHT, np.random.default_rng(0))
 
     def test_empty_certified_set_is_refused(self):
         with self.assertRaises(PessimismValidationError):

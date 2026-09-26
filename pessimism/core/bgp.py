@@ -1,7 +1,7 @@
-"""Algorithm 2: the finite-sample ITP oracle for one group.
+"""Algorithm 2: the finite-sample BGP oracle for one group.
 
 Both entry points read only stored scores. Nothing here draws a response,
-calls a reward model, or knows what the responses are; `itp_sample` carries the
+calls a reward model, or knows what the responses are; `bgp_sample` carries the
 response objects along solely so that the categorical draw can return one.
 
 The bisection returns the *lower* endpoint of the final bracket, not its
@@ -34,8 +34,8 @@ BISECTION_ITERATION_MARGIN = 8
 
 
 @dataclass(frozen=True, eq=False)
-class ITPCertification:
-    """The output of ITP-Certify: normalizer, weights, and the certificate."""
+class BGPCertification:
+    """The output of BGP-Certify: normalizer, weights, and the certificate."""
 
     normalizer: float
     weights: np.ndarray
@@ -76,14 +76,14 @@ class ITPCertification:
 
 
 @dataclass(frozen=True, eq=False)
-class ITPSampleResult:
+class BGPSampleResult:
     """One categorical draw from a group's own stored candidates."""
 
     selected_response: Any
     selected_index: int
     selection_probability: float
     probabilities: np.ndarray
-    certification: ITPCertification
+    certification: BGPCertification
 
     @property
     def certificate(self) -> float:
@@ -107,8 +107,8 @@ def _certify_array(
     error_scale: float = 1.0,
     error_decay: float = 0.0,
     decay_count: int = 1,
-) -> ITPCertification:
-    """ITP-Certify on scores already validated by the caller.
+) -> BGPCertification:
+    """BGP-Certify on scores already validated by the caller.
 
     Two independent knobs shrink the reward-mismatch penalty, and they are not
     the same operation. `penalty_scale` multiplies the finished penalty, so
@@ -182,21 +182,21 @@ def _certify_array(
     )
 
     if float(weights.min()) < -WEIGHT_ABSOLUTE_TOLERANCE:
-        raise PessimismValidationError("ITP weights must be nonnegative")
+        raise PessimismValidationError("BGP weights must be nonnegative")
     if mean_weight < 1.0 - WEIGHT_ABSOLUTE_TOLERANCE:
         raise PessimismValidationError(
-            f"mean ITP weight {mean_weight!r} fell below 1: the bisection did "
+            f"mean BGP weight {mean_weight!r} fell below 1: the bisection did "
             "not return a normalizer at or below the root"
         )
     upper = 1.0 + bisection_tol / beta + WEIGHT_ABSOLUTE_TOLERANCE
     if mean_weight > upper:
         raise PessimismValidationError(
-            f"mean ITP weight {mean_weight!r} exceeds 1 + tol/beta = {upper!r}"
+            f"mean BGP weight {mean_weight!r} exceeds 1 + tol/beta = {upper!r}"
         )
     if not float(weights.sum()) > 0.0:
-        raise PessimismValidationError("ITP weights carry no mass")
+        raise PessimismValidationError("BGP weights carry no mass")
 
-    return ITPCertification(
+    return BGPCertification(
         normalizer=normalizer,
         weights=weights,
         certificate=certificate,
@@ -217,7 +217,7 @@ def _certify_array(
     )
 
 
-def itp_certify(
+def bgp_certify(
     scores: Sequence[float],
     beta: float,
     error_bound: float,
@@ -226,8 +226,8 @@ def itp_certify(
     error_scale: float = 1.0,
     error_decay: float = 0.0,
     decay_count: int = 1,
-) -> ITPCertification:
-    """ITP-Certify: empirical normalizer, weights and certificate G_hat(beta; n).
+) -> BGPCertification:
+    """BGP-Certify: empirical normalizer, weights and certificate G_hat(beta; n).
 
     `scores` are one group's first `n` stored proxy scores. The certificate is
 
@@ -249,7 +249,7 @@ def itp_certify(
     )
 
 
-def itp_sample(
+def bgp_sample(
     responses: Sequence[Any],
     scores: Sequence[float],
     beta: float,
@@ -260,8 +260,8 @@ def itp_sample(
     error_scale: float = 1.0,
     error_decay: float = 0.0,
     decay_count: int = 1,
-) -> ITPSampleResult:
-    """ITP-Sample: certify, then draw one stored response by its ITP weight.
+) -> BGPSampleResult:
+    """BGP-Sample: certify, then draw one stored response by its BGP weight.
 
     The categorical law is `weights / sum(weights)`, never `weights / n`. With a
     positive bisection tolerance the weights only have mean in `[1, 1 + tau/beta]`,
@@ -293,7 +293,7 @@ def itp_sample(
     total = float(weights.sum())
     probabilities = weights / total
     index = int(rng.choice(probabilities.size, p=probabilities))
-    return ITPSampleResult(
+    return BGPSampleResult(
         selected_response=responses[index],
         selected_index=index,
         selection_probability=float(probabilities[index]),
