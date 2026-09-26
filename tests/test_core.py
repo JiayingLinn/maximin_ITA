@@ -1,7 +1,7 @@
 """Analytical and allocation regression tests using fixture scores only.
 
 These checks cover the BGP oracle, certification schedule, adaptive allocation,
-finite capacity, fixed-beta variants, and equal/greedy best-of-n baselines.
+finite capacity, fixed-beta variants, and equal/greedy Best-of-N baselines.
 No model, judge, dataset, or original response pool is needed.
 """
 

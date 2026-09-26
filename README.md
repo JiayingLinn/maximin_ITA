@@ -1,10 +1,10 @@
-# MAXMIN INFERENCE-TIME ALIGNMENT WITH DIVERSE REWARDS
+# MAXIMIN INFERENCE-TIME ALIGNMENT WITH DIVERSE REWARDS
 
 We provide a pipeline that adaptively allocates inference budgets across groups,
 with two main algorithms:
 
-- **Greedy-BoN** achieves optimal max–min performance on proxy rewards.
-- **Batched Greedy Pessimistic (BGP)** maintains competitive performance when
+- **Greedy-BoN** achieves optimal maximin performance on proxy rewards.
+- **Batched Greedy-Pessimistic (BGP)** maintains competitive performance when
   proxy rewards contain errors.
 
 ## Setup

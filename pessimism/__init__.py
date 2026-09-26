@@ -1,7 +1,7 @@
 """Paper-faithful Greedy-Pessimistic allocation with finite-sample BGP oracles.
 
 `core` holds Algorithm 1 and Algorithm 2 exactly as the paper states them and
-depends on nothing but NumPy. `adapters` turns this repository's stored
+depends on nothing but NumPy. `input_data.ProxyStream` turns stored
 response pools into the ordered sample-and-score stream Algorithm 1 consumes.
 Nothing in `core` knows what a domain, a prompt, or a reward model is.
 """

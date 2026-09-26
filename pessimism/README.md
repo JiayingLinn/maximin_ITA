@@ -1,6 +1,6 @@
 # Allocation algorithms
 
-Greedy-BoN and Batched Greedy Pessimistic (BGP) for adaptive inference budget
+Greedy-BoN and Batched Greedy-Pessimistic (BGP) for adaptive inference budget
 allocation, with comparison baselines.
 
 Run from the repository root, using `RUN_ROOT` and the prepared pools from the

@@ -1,4 +1,4 @@
-"""Non-adaptive comparisons for the Greedy-Pessimistic allocation.
+"""Allocation and selection baselines for Greedy-Pessimistic allocation.
 
 None of this is part of Algorithm 1 or Algorithm 2. It exists so that a run can
 answer "compared with what?": the allocation rule and the BGP selection rule are
@@ -8,14 +8,11 @@ says which one a difference came from.
 * `uniform_bgp` keeps the BGP oracle and replaces the adaptive allocation with
   an equal split. A difference against it is attributable to the allocation.
 * `uniform_argmax` keeps the equal split and replaces the BGP draw with
-  best-of-n's arg max, which is what `shp_rm.bon` already does. A difference
-  against it is attributable to the selection rule, and it is the bridge to the
-  numbers already in RESULTS.md.
-* `greedy_argmax` is the rule `fair_bon/run_greedy_bon.py` implements: one draw
-  per group, then every remaining unit to whichever group's current best-of-n is
-  lowest. It changes both the allocation and the selection relative to
-  Greedy-Pessimistic, so it is not a controlled comparison -- it is the incumbent, and
-  the question the judge is being asked is whether pessimism beats it.
+  Best-of-N (BoN) selection. A difference against it is attributable to the
+  selection rule.
+* `greedy_argmax` implements Greedy-BoN: one draw per group, then every remaining
+  unit to whichever group's current Best-of-N score is lowest. It changes both
+  the allocation and the selection relative to Greedy-Pessimistic.
 """
 
 from dataclasses import dataclass, field
@@ -136,11 +133,11 @@ def greedy_argmax(
     sample_and_score: Callable[[Hashable, int], tuple[Sequence[Any], Sequence[float]]],
     capacity: Optional[dict] = None,
 ) -> dict[Hashable, dict[str, Any]]:
-    """The incumbent rule from `fair_bon/run_greedy_bon.py`, on the same stream.
+    """Greedy-BoN allocation and selection on the same ordered stream.
 
     Every group starts with one draw; each remaining unit of budget goes to the
-    group whose current best-of-n is lowest, ties to the lowest group index. The
-    scores are already on the shared `[0, R_max]` axis when the adapter has
+    group whose current Best-of-N score is lowest, ties to the lowest group index.
+    The scores are already on the shared `[0, R_max]` axis when the adapter has
     rescaled them, which is what makes the cross-group minimum meaningful.
 
     Unlike Algorithm 1 this reveals one response at a time, so it sees strictly
@@ -202,7 +199,7 @@ def uniform_argmax(
     total_budget: int,
     sample_and_score: Callable[[Hashable, int], tuple[Sequence[Any], Sequence[float]]],
 ) -> dict[Hashable, dict[str, Any]]:
-    """Equal allocation, then best-of-n's arg max. Ties go to the earlier draw."""
+    """Equal allocation, then Best-of-N selection. Ties go to the earlier draw."""
     groups = list(group_ids)
     shares = even_split(total_budget, len(groups))
     picked: dict[Hashable, dict[str, Any]] = {}
