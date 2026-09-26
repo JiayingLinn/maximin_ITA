@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 
 from .baselines import even_split, greedy_argmax, uniform_argmax, uniform_bgp
-from .core.lcb_greedy import lcb_greedy
+from .core.greedy_pessimistic import greedy_pessimistic
 from .core.radii import CertificationSchedule, delta_total, log_factor
 from .core.validation import (
     PessimismValidationError, require_beta_grid, require_confidence_delta,
@@ -18,7 +18,7 @@ from .input_data import CandidatePool, ProxyStream, load_pool
 
 METHODS = (
     "uniform_argmax", "greedy_argmax", "uniform_bgp_auto", "uniform_bgp_fixed",
-    "lcb_greedy_auto", "lcb_greedy_fixed",
+    "greedy_pessimistic_auto", "greedy_pessimistic_fixed",
 )
 DEFAULT_GRID = (0.01, 0.03, 0.1, 0.3, 1.0, 3.0)
 
@@ -73,7 +73,7 @@ def run_comparison(
             raise PessimismValidationError(
                 "equal allocation exceeds a group's capacity; uniform methods do not redistribute"
             )
-    needs_bgp = any("bgp" in method or method.startswith("lcb_") for method in methods)
+    needs_bgp = any("bgp" in method or method.startswith("greedy_pessimistic_") for method in methods)
     schedule = None
     automatic_slack = slack is None
     if needs_bgp:
@@ -84,7 +84,7 @@ def run_comparison(
             len(groups), budget, grid, pool.r_max, slack, confidence_delta,
             bisection_tol=bisection_tol, min_initial_count=initial_count,
         )
-        if any(method.startswith("lcb_") for method in methods):
+        if any(method.startswith("greedy_pessimistic_") for method in methods):
             if any(cap < schedule.initial_count for cap in capacities.values()):
                 raise PessimismValidationError("initial_count exceeds a group's capacity")
 
@@ -103,7 +103,7 @@ def run_comparison(
             result = uniform_bgp(groups, budget, bounds, schedule, stream, rng,
                                  fixed_beta=pinned, error_scale=alpha)
         else:
-            result = lcb_greedy(
+            result = greedy_pessimistic(
                 groups, budget, bounds, slack, confidence_delta, grid, pool.r_max,
                 stream, rng, bisection_tol=schedule.bisection_tol,
                 capacity=capacities if capacity_mode == "capped" else None,
@@ -170,9 +170,9 @@ def run_comparison(
                 caveats.append("Fixed beta bypasses the certified grid: this is an empirical comparison.")
             if alpha != 1:
                 caveats.append("Alpha rescales the supplied L2 error bound; the original certificate assumptions no longer apply without a justified rescaled bound.")
-            if method.startswith("lcb_") and index_error_scale is not None and index_error_scale != alpha:
+            if method.startswith("greedy_pessimistic_") and index_error_scale is not None and index_error_scale != alpha:
                 caveats.append("Index error scaling is decoupled from beta selection: empirical ablation.")
-            if method.startswith("lcb_") and allocation_batch_size is not None:
+            if method.startswith("greedy_pessimistic_") and allocation_batch_size is not None:
                 caveats.append("Constant allocation batches replace doubling: empirical ablation.")
             if schedule.initial_count > schedule.certifiable_count:
                 caveats.append("The requested initialization floor exceeds the minimum certifiable count.")
@@ -181,7 +181,7 @@ def run_comparison(
             if history else
             (max(value.get("capped_steps", 0) for value in result.values()) if not is_bgp else 0)
         )
-        if capacity_mode == "capped" and method.startswith(("greedy_", "lcb_")):
+        if capacity_mode == "capped" and method.startswith("greedy_"):
             caveats.append("Finite-pool capacity checks can exclude exhausted groups or shorten a batch; this differs from unlimited sampling.")
         method_result = {
             "total_revealed": sum(counts.values()), "final_counts": counts,
@@ -191,7 +191,7 @@ def run_comparison(
         }
         if is_bgp:
             method_result["schedule"] = schedule.as_dict()
-        if method.startswith("lcb_"):
+        if method.startswith("greedy_pessimistic_"):
             method_result["allocation_history"] = history
         results[method] = method_result
     return {
@@ -217,7 +217,7 @@ def build_parser():
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--alpha", "--error-scale", type=float, default=1.0,
                         help="Multiply group L2 error bounds before forming the penalty")
-    parser.add_argument("--initial-count", type=int, default=2, help="Minimum initial responses per LCB group")
+    parser.add_argument("--initial-count", type=int, default=2, help="Minimum initial responses per Greedy-Pessimistic group")
     parser.add_argument("--fixed-beta", type=float, default=0.1)
     parser.add_argument("--beta-grid", default=",".join(map(str, DEFAULT_GRID)), help="Strictly increasing comma-separated positive values")
     parser.add_argument("--slack", type=float, help="If omitted, derive from initial count and largest beta (often vacuous)")
@@ -225,7 +225,7 @@ def build_parser():
     parser.add_argument("--bisection-tol", type=float)
     parser.add_argument("--capacity-mode", choices=("capped", "uncapped"), default="capped")
     parser.add_argument("--allocation-batch-size", type=int, help="Empirical constant-batch ablation; default is doubling")
-    parser.add_argument("--index-error-scale", type=float, help="Empirical decoupled index-error scaling for LCB")
+    parser.add_argument("--index-error-scale", type=float, help="Empirical decoupled index-error scaling for Greedy-Pessimistic")
     parser.add_argument("--output", type=Path, help="Write JSON here; default is stdout")
     return parser
 

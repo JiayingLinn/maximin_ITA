@@ -12,7 +12,7 @@ python -m pip install -r requirements.txt
 
 # Run Greedy-BoN and BGP on one prepared pool.
 python -m pessimism.run --input "$RUN_ROOT/algorithm_inputs/pool_00000.json" \
-  --methods greedy_argmax lcb_greedy_auto --budget 255 --seed 2026 \
+  --methods greedy_argmax greedy_pessimistic_auto --budget 255 --seed 2026 \
   --output "$RUN_ROOT/results/main_algorithms.json"
 
 # Compare all algorithms and baselines on the same pool.

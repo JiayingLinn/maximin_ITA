@@ -68,7 +68,7 @@ bash scripts/run_pipeline.sh all
 
 # Run Greedy-BoN and BGP on one prepared pool.
 python -m pessimism.run --input "$RUN_ROOT/algorithm_inputs/pool_00000.json" \
-  --methods greedy_argmax lcb_greedy_auto --budget 255 --seed "$SEED" \
+  --methods greedy_argmax greedy_pessimistic_auto --budget 255 --seed "$SEED" \
   --output "$RUN_ROOT/results/custom.json"
 
 # Show pipeline configuration and algorithm options.

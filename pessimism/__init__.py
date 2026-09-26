@@ -1,4 +1,4 @@
-"""Paper-faithful LCB-Greedy allocation with finite-sample BGP oracles.
+"""Paper-faithful Greedy-Pessimistic allocation with finite-sample BGP oracles.
 
 `core` holds Algorithm 1 and Algorithm 2 exactly as the paper states them and
 depends on nothing but NumPy. `adapters` turns this repository's stored
@@ -12,13 +12,13 @@ from .core.bgp import (
     bgp_certify,
     bgp_sample,
 )
-from .core.lcb_greedy import (
+from .core.greedy_pessimistic import (
     AllocationStep,
     GroupIndex,
     GroupOutcome,
-    LCBGreedyResult,
+    GreedyPessimisticResult,
     group_index,
-    lcb_greedy,
+    greedy_pessimistic,
 )
 from .core.radii import (
     CertificationSchedule,
@@ -41,7 +41,7 @@ __all__ = [
     "GroupOutcome",
     "BGPCertification",
     "BGPSampleResult",
-    "LCBGreedyResult",
+    "GreedyPessimisticResult",
     "PessimismValidationError",
     "certified_betas",
     "default_bisection_tol",
@@ -53,7 +53,7 @@ __all__ = [
     "initial_count",
     "bgp_certify",
     "bgp_sample",
-    "lcb_greedy",
+    "greedy_pessimistic",
     "log_factor",
     "m_beta",
 ]

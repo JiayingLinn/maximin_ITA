@@ -48,8 +48,8 @@ class RunnerTests(unittest.TestCase):
         first = run_comparison(self.pool, budget=30, seed=8)
         second = run_comparison(self.pool, budget=30, seed=8, methods=reversed(METHODS))
         self.assertEqual(first["methods"], second["methods"])
-        solo = run_comparison(self.pool, budget=30, seed=8, methods=["lcb_greedy_auto"])
-        self.assertEqual(first["methods"]["lcb_greedy_auto"], solo["methods"]["lcb_greedy_auto"])
+        solo = run_comparison(self.pool, budget=30, seed=8, methods=["greedy_pessimistic_auto"])
+        self.assertEqual(first["methods"]["greedy_pessimistic_auto"], solo["methods"]["greedy_pessimistic_auto"])
 
     def test_judge_cannot_change_allocation_or_selection(self):
         changed = copy.deepcopy(self.document)
@@ -106,7 +106,7 @@ class RunnerTests(unittest.TestCase):
              "candidates": [{"id": str(i), "proxy_score": 0.7} for i in range(20)]},
         ]}
         pool = parse_pool(doc)
-        methods = ["greedy_argmax", "lcb_greedy_auto", "lcb_greedy_fixed"]
+        methods = ["greedy_argmax", "greedy_pessimistic_auto", "greedy_pessimistic_fixed"]
         result = run_comparison(pool, methods=methods, budget=20)
         for method in methods:
             self.assertEqual(result["methods"][method]["final_counts"], {"short": 4, "long": 16})
@@ -118,7 +118,7 @@ class RunnerTests(unittest.TestCase):
 
     def test_initialization_budget_includes_all_groups(self):
         result = run_comparison(self.pool, budget=9, initial_count=3)
-        for method in ("lcb_greedy_auto", "lcb_greedy_fixed"):
+        for method in ("greedy_pessimistic_auto", "greedy_pessimistic_fixed"):
             self.assertEqual(list(result["methods"][method]["final_counts"].values()), [3, 3, 3])
             self.assertEqual(result["methods"][method]["allocation_history"], [])
         with self.assertRaisesRegex(PessimismValidationError, "initialization"):
@@ -126,7 +126,7 @@ class RunnerTests(unittest.TestCase):
 
     def test_report_distinguishes_floor_and_certifiable_count(self):
         report = run_comparison(self.pool, budget=30, initial_count=3, slack=1000)
-        schedule = report["methods"]["lcb_greedy_auto"]["schedule"]
+        schedule = report["methods"]["greedy_pessimistic_auto"]["schedule"]
         self.assertEqual(schedule["initial_count"], 3)
         self.assertEqual(schedule["certifiable_count"], 1)
         self.assertTrue(schedule["guarantee_is_vacuous"])
@@ -134,7 +134,7 @@ class RunnerTests(unittest.TestCase):
 
     def test_fixed_beta_and_alpha_are_recorded(self):
         report = run_comparison(self.pool, budget=30, fixed_beta=0.0001, alpha=0.5)
-        for method in ("uniform_bgp_fixed", "lcb_greedy_fixed"):
+        for method in ("uniform_bgp_fixed", "greedy_pessimistic_fixed"):
             for group, row in zip(self.pool.groups, report["methods"][method]["groups"]):
                 self.assertEqual(row["beta"], 0.0001)
                 self.assertAlmostEqual(row["effective_error"], group.error_bound * 0.5)

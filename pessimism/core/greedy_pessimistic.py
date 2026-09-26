@@ -1,4 +1,4 @@
-"""LCB-Greedy allocation over groups with finite-sample BGP oracles.
+"""Greedy-Pessimistic allocation over groups with finite-sample BGP oracles.
 
 The paper's rule gives the next batch to the group whose certificate is currently
 lowest and makes that batch as large as everything that group already has.  The
@@ -129,7 +129,7 @@ class GroupOutcome:
 
 
 @dataclass(frozen=True, eq=False)
-class LCBGreedyResult:
+class GreedyPessimisticResult:
     """The mechanism's output plus everything needed to audit the run."""
 
     outcomes: dict[Hashable, GroupOutcome]
@@ -260,7 +260,7 @@ def group_index(
     )
 
 
-def lcb_greedy(
+def greedy_pessimistic(
     group_ids: Sequence[Hashable],
     total_budget: int,
     error_bounds: Sequence[float],
@@ -280,7 +280,7 @@ def lcb_greedy(
     index_error_scale: Optional[float] = None,
     error_decay: float = 0.0,
     min_initial_count: Optional[int] = None,
-) -> LCBGreedyResult:
+) -> GreedyPessimisticResult:
     """Run Algorithm 1 and return one response per group with full diagnostics.
 
     `sample_and_score(group, m)` must return exactly `m` fresh responses and
@@ -291,7 +291,7 @@ def lcb_greedy(
     """
     groups = list(group_ids)
     if len(groups) == 0:
-        raise PessimismValidationError("lcb_greedy needs at least one group")
+        raise PessimismValidationError("greedy_pessimistic needs at least one group")
     if len(set(groups)) != len(groups):
         raise PessimismValidationError("group_ids must be distinct")
     if len(error_bounds) != len(groups):
@@ -517,7 +517,7 @@ def lcb_greedy(
             sample_result=sampled,
         )
 
-    return LCBGreedyResult(
+    return GreedyPessimisticResult(
         outcomes=outcomes,
         schedule=schedule,
         history=history,

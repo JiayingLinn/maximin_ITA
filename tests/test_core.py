@@ -12,9 +12,9 @@ from unittest.mock import patch
 import numpy as np
 
 from pessimism.baselines import even_split, greedy_argmax, uniform_argmax, uniform_bgp
-from pessimism.core import lcb_greedy as lcb_module
+from pessimism.core import greedy_pessimistic as greedy_pessimistic_module
 from pessimism.core.bgp import bgp_certify, bgp_sample
-from pessimism.core.lcb_greedy import group_index, lcb_greedy
+from pessimism.core.greedy_pessimistic import group_index, greedy_pessimistic
 from pessimism.core.radii import (
     CertificationSchedule,
     certified_betas,
@@ -303,7 +303,7 @@ def make_tables(seed=0, n=4000, groups=("a", "b", "c")):
     }
 
 
-class TestLCBGreedy(unittest.TestCase):
+class TestGreedyPessimistic(unittest.TestCase):
     """Spec 8.3: Algorithm 1's allocation, on a deterministic fake stream."""
 
     def setUp(self):
@@ -322,7 +322,7 @@ class TestLCBGreedy(unittest.TestCase):
 
     def run_once(self, seed=0, tables=None):
         stream = Stream(tables if tables is not None else make_tables())
-        result = lcb_greedy(
+        result = greedy_pessimistic(
             sample_and_score=stream, rng=np.random.default_rng(seed), **self.kwargs
         )
         return result, stream
@@ -351,7 +351,7 @@ class TestLCBGreedy(unittest.TestCase):
 
     def test_fixed_batch_refreshes_after_each_requested_batch(self):
         stream = Stream(make_tables())
-        result = lcb_greedy(
+        result = greedy_pessimistic(
             sample_and_score=stream,
             rng=np.random.default_rng(0),
             allocation_batch_size=8,
@@ -367,7 +367,7 @@ class TestLCBGreedy(unittest.TestCase):
         for bad in (0, -1, 2.5):
             with self.subTest(bad=bad):
                 with self.assertRaises(PessimismValidationError):
-                    lcb_greedy(
+                    greedy_pessimistic(
                         sample_and_score=Stream(make_tables()),
                         rng=np.random.default_rng(0),
                         allocation_batch_size=bad,
@@ -392,13 +392,13 @@ class TestLCBGreedy(unittest.TestCase):
 
     def test_only_the_chosen_group_is_recomputed(self):
         calls = []
-        original = lcb_module.group_index
+        original = greedy_pessimistic_module.group_index
 
         def counting(scores, certified, error_bound, bisection_tol):
             calls.append(len(scores))
             return original(scores, certified, error_bound, bisection_tol)
 
-        with patch.object(lcb_module, "group_index", counting):
+        with patch.object(greedy_pessimistic_module, "group_index", counting):
             result, _ = self.run_once()
         # k initialization calls plus exactly one per allocation step.
         self.assertEqual(len(calls), len(self.groups) + len(result.history))
@@ -427,18 +427,18 @@ class TestLCBGreedy(unittest.TestCase):
             self.assertEqual(outcome.selected_response[0], group)
             self.assertLess(outcome.selected_response[1], result.final_counts[group])
             self.assertGreater(outcome.selection_probability, 0.0)
-        # lcb_greedy has already returned, so no callback ran after allocation.
+        # greedy_pessimistic has already returned, so no callback ran after allocation.
         self.assertEqual(len(stream.calls), calls_after_allocation)
 
     def test_one_categorical_draw_per_group(self):
         draws = []
-        original = lcb_module.bgp_sample
+        original = greedy_pessimistic_module.bgp_sample
 
         def counting(**kwargs):
             draws.append(kwargs["beta"])
             return original(**kwargs)
 
-        with patch.object(lcb_module, "bgp_sample", counting):
+        with patch.object(greedy_pessimistic_module, "bgp_sample", counting):
             result, _ = self.run_once()
         self.assertEqual(len(draws), len(self.groups))
         self.assertEqual(len(result.outcomes), len(self.groups))
@@ -467,7 +467,7 @@ class TestLCBGreedy(unittest.TestCase):
                 **{**certification.__dict__, "certificate": 0.5}
             )
 
-        with patch.object(lcb_module, "bgp_certify", flat):
+        with patch.object(greedy_pessimistic_module, "bgp_certify", flat):
             tied = group_index(constant, grid, 0.0, TIGHT)
         self.assertAlmostEqual(tied.beta, float(grid[0]), places=12)
         self.assertEqual(len(tied.certificates), grid.size)
@@ -514,7 +514,7 @@ class TestCapacity(unittest.TestCase):
     def test_no_group_exceeds_its_capacity(self):
         tables = make_tables(seed=5, n=4000)
         stream = Stream(tables)
-        result = lcb_greedy(
+        result = greedy_pessimistic(
             sample_and_score=stream, rng=np.random.default_rng(0),
             **self.kwargs(600, 210),
         )
@@ -525,7 +525,7 @@ class TestCapacity(unittest.TestCase):
         self.assertTrue(any(step.capped for step in result.history))
 
     def test_full_groups_leave_the_argmin(self):
-        result = lcb_greedy(
+        result = greedy_pessimistic(
             sample_and_score=Stream(make_tables(seed=6, n=4000)),
             rng=np.random.default_rng(0), **self.kwargs(600, 210),
         )
@@ -536,7 +536,7 @@ class TestCapacity(unittest.TestCase):
 
     def test_budget_beyond_the_pool_is_refused(self):
         with self.assertRaises(PessimismValidationError):
-            lcb_greedy(
+            greedy_pessimistic(
                 sample_and_score=Stream(make_tables(seed=7, n=4000)),
                 rng=np.random.default_rng(0), **self.kwargs(700, 210),
             )
@@ -545,7 +545,7 @@ class TestCapacity(unittest.TestCase):
         # Total capacity clears the budget, so this can only fail on the
         # initialization check rather than the cruder total-capacity one.
         with self.assertRaises(PessimismValidationError) as caught:
-            lcb_greedy(
+            greedy_pessimistic(
                 sample_and_score=Stream(make_tables(seed=8, n=4000)),
                 rng=np.random.default_rng(0), **self.kwargs(90, 32),
             )
@@ -553,7 +553,7 @@ class TestCapacity(unittest.TestCase):
 
     def test_budget_beyond_total_capacity_is_refused_up_front(self):
         with self.assertRaises(PessimismValidationError) as caught:
-            lcb_greedy(
+            greedy_pessimistic(
                 sample_and_score=Stream(make_tables(seed=8, n=4000)),
                 rng=np.random.default_rng(0), **self.kwargs(300, 20),
             )
@@ -565,8 +565,8 @@ class TestCapacity(unittest.TestCase):
             group_ids=self.groups, total_budget=600, error_bounds=[0.0] * 3,
             slack=14.0, confidence_delta=0.1, beta_grid=self.grid, r_max=1.0,
         )
-        a = lcb_greedy(sample_and_score=Stream(tables), rng=np.random.default_rng(1), **base)
-        b = lcb_greedy(
+        a = greedy_pessimistic(sample_and_score=Stream(tables), rng=np.random.default_rng(1), **base)
+        b = greedy_pessimistic(
             sample_and_score=Stream(tables), rng=np.random.default_rng(1),
             capacity={g: 10**6 for g in self.groups}, **base,
         )
@@ -597,7 +597,7 @@ class TestFixedBeta(unittest.TestCase):
         )
 
     def test_every_index_uses_the_pinned_beta(self):
-        result = lcb_greedy(
+        result = greedy_pessimistic(
             sample_and_score=Stream(make_tables(seed=2, n=4000)),
             rng=np.random.default_rng(0), fixed_beta=0.0063, **self.base,
         )
@@ -608,7 +608,7 @@ class TestFixedBeta(unittest.TestCase):
 
     def test_the_pinned_beta_need_not_be_certified(self):
         """The point of the flag: reach betas the radius will not certify."""
-        result = lcb_greedy(
+        result = greedy_pessimistic(
             sample_and_score=Stream(make_tables(seed=2, n=4000)),
             rng=np.random.default_rng(0), fixed_beta=0.0005, **self.base,
         )
@@ -619,11 +619,11 @@ class TestFixedBeta(unittest.TestCase):
             self.assertAlmostEqual(result.outcomes[group].beta_hat, 0.0005, places=12)
 
     def test_schedule_and_initial_count_are_untouched(self):
-        plain = lcb_greedy(
+        plain = greedy_pessimistic(
             sample_and_score=Stream(make_tables(seed=3, n=4000)),
             rng=np.random.default_rng(0), **self.base,
         )
-        pinned = lcb_greedy(
+        pinned = greedy_pessimistic(
             sample_and_score=Stream(make_tables(seed=3, n=4000)),
             rng=np.random.default_rng(0), fixed_beta=0.0063, **self.base,
         )
@@ -633,13 +633,13 @@ class TestFixedBeta(unittest.TestCase):
         self.assertEqual(sum(pinned.final_counts.values()), 600)
 
     def test_a_pinned_beta_equal_to_the_certified_choice_reproduces_it(self):
-        plain = lcb_greedy(
+        plain = greedy_pessimistic(
             sample_and_score=Stream(make_tables(seed=4, n=4000)),
             rng=np.random.default_rng(1), **self.base,
         )
         only = {o.beta_hat for o in plain.outcomes.values()}
         if len(only) == 1:
-            pinned = lcb_greedy(
+            pinned = greedy_pessimistic(
                 sample_and_score=Stream(make_tables(seed=4, n=4000)),
                 rng=np.random.default_rng(1), fixed_beta=only.pop(), **self.base,
             )
@@ -648,7 +648,7 @@ class TestFixedBeta(unittest.TestCase):
     def test_invalid_pinned_beta_is_refused(self):
         for bad in (0.0, -1.0):
             with self.assertRaises(PessimismValidationError):
-                lcb_greedy(
+                greedy_pessimistic(
                     sample_and_score=Stream(make_tables(seed=2, n=4000)),
                     rng=np.random.default_rng(0), fixed_beta=bad, **self.base,
                 )
@@ -745,7 +745,7 @@ class TestValidation(unittest.TestCase):
     def test_out_of_range_scores_are_refused_by_algorithm_one(self):
         stream = Stream({"a": np.full(500, 1.5), "b": np.full(500, 0.5)})
         with self.assertRaises(PessimismValidationError) as caught:
-            lcb_greedy(
+            greedy_pessimistic(
                 group_ids=["a", "b"], total_budget=300, error_bounds=[0.0, 0.0],
                 slack=14.0, confidence_delta=0.1, beta_grid=self.grid, r_max=1.0,
                 sample_and_score=stream, rng=np.random.default_rng(0),
@@ -757,7 +757,7 @@ class TestValidation(unittest.TestCase):
             return [0] * (count - 1), np.full(count - 1, 0.5)
 
         with self.assertRaises(PessimismValidationError):
-            lcb_greedy(
+            greedy_pessimistic(
                 group_ids=["a", "b"], total_budget=300, error_bounds=[0.0, 0.0],
                 slack=14.0, confidence_delta=0.1, beta_grid=self.grid, r_max=1.0,
                 sample_and_score=short, rng=np.random.default_rng(0),
@@ -766,13 +766,13 @@ class TestValidation(unittest.TestCase):
     def test_duplicate_groups_and_mismatched_bounds(self):
         stream = Stream(make_tables(groups=("a", "b")))
         with self.assertRaises(PessimismValidationError):
-            lcb_greedy(
+            greedy_pessimistic(
                 group_ids=["a", "a"], total_budget=300, error_bounds=[0.0, 0.0],
                 slack=14.0, confidence_delta=0.1, beta_grid=self.grid, r_max=1.0,
                 sample_and_score=stream, rng=np.random.default_rng(0),
             )
         with self.assertRaises(PessimismValidationError):
-            lcb_greedy(
+            greedy_pessimistic(
                 group_ids=["a", "b"], total_budget=300, error_bounds=[0.0],
                 slack=14.0, confidence_delta=0.1, beta_grid=self.grid, r_max=1.0,
                 sample_and_score=stream, rng=np.random.default_rng(0),
@@ -781,7 +781,7 @@ class TestValidation(unittest.TestCase):
     def test_unseeded_rng_is_refused(self):
         stream = Stream(make_tables(groups=("a", "b")))
         with self.assertRaises(PessimismValidationError):
-            lcb_greedy(
+            greedy_pessimistic(
                 group_ids=["a", "b"], total_budget=300, error_bounds=[0.0, 0.0],
                 slack=14.0, confidence_delta=0.1, beta_grid=self.grid, r_max=1.0,
                 sample_and_score=stream, rng=np.random.RandomState(0),

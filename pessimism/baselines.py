@@ -1,4 +1,4 @@
-"""Non-adaptive comparisons for the LCB-Greedy allocation.
+"""Non-adaptive comparisons for the Greedy-Pessimistic allocation.
 
 None of this is part of Algorithm 1 or Algorithm 2. It exists so that a run can
 answer "compared with what?": the allocation rule and the BGP selection rule are
@@ -14,7 +14,7 @@ says which one a difference came from.
 * `greedy_argmax` is the rule `fair_bon/run_greedy_bon.py` implements: one draw
   per group, then every remaining unit to whichever group's current best-of-n is
   lowest. It changes both the allocation and the selection relative to
-  LCB-Greedy, so it is not a controlled comparison -- it is the incumbent, and
+  Greedy-Pessimistic, so it is not a controlled comparison -- it is the incumbent, and
   the question the judge is being asked is whether pessimism beats it.
 """
 
@@ -24,7 +24,7 @@ from typing import Any, Callable, Hashable, Optional, Sequence
 import numpy as np
 
 from .core.bgp import bgp_sample
-from .core.lcb_greedy import GroupOutcome, group_index
+from .core.greedy_pessimistic import GroupOutcome, group_index
 from .core.radii import CertificationSchedule
 from .core.validation import PessimismValidationError
 
@@ -67,7 +67,7 @@ def uniform_bgp(
 ) -> BaselineResult:
     """Equal allocation, then the same INDEX and BGP-Sample per group.
 
-    ``fixed_beta`` mirrors :func:`lcb_greedy`: it deliberately bypasses the
+    ``fixed_beta`` mirrors :func:`greedy_pessimistic`: it deliberately bypasses the
     certified beta set and is therefore an empirical/uncertified ablation.
     """
     groups = list(group_ids)
@@ -148,7 +148,7 @@ def greedy_argmax(
     real advantage for the incumbent and is not corrected for.
 
     `capacity` skips groups that have exhausted their stored pool, the same
-    finite-pool deviation `lcb_greedy` takes. Without it this rule pours the
+    finite-pool deviation `greedy_pessimistic` takes. Without it this rule pours the
     whole budget into one group and overruns a 256-response pool at any budget
     above about 260.
     """
